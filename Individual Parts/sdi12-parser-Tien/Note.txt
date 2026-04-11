@@ -1,0 +1,15 @@
+To send and receive messages from the SDI12-USB board it is recommended that you use this application.
+
+
+Serial Debug Assistant
+https://www.microsoft.com/store/productId/9NBLGGH43HDM
+
+
+The application should be configured with the following:
+Serial Port :	USB-SERIAL CH340 (COMx)
+Baud Rate :	9600
+Data Bits :	7
+Parity: 	Even
+Stop Bits :	One
+
+You can refer to the image.
