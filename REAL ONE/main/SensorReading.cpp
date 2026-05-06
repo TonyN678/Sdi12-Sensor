@@ -4,29 +4,77 @@
 Adafruit_BME280 bme;
 BH1750 lightMeter;
 
+bool bmeOK = false;
+bool lightOK = false;
+
 static SensorData sensorBuffer;
 
 void sensorsInit() {
   Wire.begin();
-  lightMeter.begin();
-  bme.begin(0x76);
+
+  // Initialize sensors and capture status
+  lightOK = lightMeter.begin();
+  bmeOK   = bme.begin(0x76);
+
+  Serial.print("[Init] BME280: ");
+  Serial.println(bmeOK ? "OK" : "FAIL");
+
+  Serial.print("[Init] BH1750: ");
+  Serial.println(lightOK ? "OK" : "FAIL");
+
   sensorBuffer.ready = false;
 }
 
 void readSensors() {
-  sensorBuffer.temperature = bme.readTemperature();
-  sensorBuffer.humidity     = bme.readHumidity();
-  sensorBuffer.pressure     = bme.readPressure() / 100.0;
-  sensorBuffer.lux          = lightMeter.readLightLevel();
-  sensorBuffer.ready        = true;
+  // ---- BME280 ----
+  float t = bme.readTemperature();
 
+  if (isnan(t)) {
+    bmeOK = false;
+  } else {
+    bmeOK = true;
+    sensorBuffer.temperature = t;
+    sensorBuffer.humidity    = bme.readHumidity();
+    sensorBuffer.pressure    = bme.readPressure() / 100.0;
+  }
+
+  // ---- BH1750 ----
+  float lux = lightMeter.readLightLevel();
+
+  if (lux < 0) {   // error condition
+    lightOK = false;
+  } else {
+    lightOK = true;
+    sensorBuffer.lux = lux;
+  }
+
+  // ---- Ready flag ----
+  sensorBuffer.ready = (bmeOK || lightOK);
+
+  // ---- Debug prints (kept as requested) ----
   Serial.println("[Sensors] Reading:");
   Serial.print("  Temp: ");     Serial.println(sensorBuffer.temperature);
   Serial.print("  Humidity: "); Serial.println(sensorBuffer.humidity);
   Serial.print("  Pressure: "); Serial.println(sensorBuffer.pressure);
   Serial.print("  Lux: ");      Serial.println(sensorBuffer.lux);
+  Serial.print("  BME OK: ");   Serial.println(bmeOK ? "YES" : "NO");
+  Serial.print("  Light OK: "); Serial.println(lightOK ? "YES" : "NO");
 }
 
 SensorData getSensorData() {
   return sensorBuffer;
+}
+
+int getParameterCount() {
+  int count = 0;
+
+  if (bmeOK) {
+    count += 3; // temperature, humidity, pressure
+  }
+
+  if (lightOK) {
+    count += 1; // lux
+  }
+
+  return count;
 }

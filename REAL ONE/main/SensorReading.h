@@ -15,5 +15,5 @@ struct SensorData {
 void sensorsInit();
 void readSensors();
 SensorData getSensorData();
-
+int getParameterCount();
 #endif

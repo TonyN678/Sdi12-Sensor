@@ -10,26 +10,6 @@ static unsigned long txLockoutUntil = 0;
 
 static String rxCmd = "";
 
-// ---------- CRC ----------
-uint16_t calculateCRC(const String &data) {
-  uint16_t crc = 0;
-  for (int i = 0; i < data.length(); i++) {
-    crc ^= (uint16_t)data[i] << 8;
-    for (int j = 0; j < 8; j++) {
-      if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
-      else              crc <<= 1;
-    }
-  }
-  return crc;
-}
-
-String encodeCRC(uint16_t crc) {
-  char c1 = 0x40 | (crc >> 12);
-  char c2 = 0x40 | ((crc >> 6) & 0x3F);
-  char c3 = 0x40 | (crc & 0x3F);
-  return String(c1) + String(c2) + String(c3);
-}
-
 // ---------- TX ----------
 void sdiSend(String response) {
   digitalWrite(DIRO_PIN, LOW);
@@ -94,14 +74,16 @@ void parseCommand(String cmd) {
 
   if (body == "M") {
     readSensors();
-    sdiSend(String(sensorAddress) + "0005\r\n");
+    int n = getParameterCount();
+    String response = String(sensorAddress) + "003" + String(n);
+
+    sdiSend(response + "\r\n");
     return;
-  }
+      }
 
   if (body == "D0") {
     String values = buildValueString();
-    uint16_t crc = calculateCRC(values);
-    sdiSend(values + encodeCRC(crc) + "\r\n");
+    sdiSend(values + "\r\n");
     return;
   }
 
