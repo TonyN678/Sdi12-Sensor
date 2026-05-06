@@ -10,12 +10,14 @@ static unsigned long txLockoutUntil = 0;
 
 static String rxCmd = "";
 
-// ---------- TX ----------
+// ===================== TX =====================
 void sdiSend(String response) {
   digitalWrite(DIRO_PIN, LOW);
   delay(15);
+
   Serial1.print(response);
   Serial1.flush();
+
   delay(10);
   digitalWrite(DIRO_PIN, HIGH);
 
@@ -27,11 +29,14 @@ void sdiSend(String response) {
   Serial.println(response);
 }
 
-// ---------- Build Data ----------
-String buildValueString() {
+// ===================== BUILDERS =====================
+
+// Full system (R0)
+String buildAllString() {
   SensorData data = getSensorData();
 
   String values = String(sensorAddress);
+
   if (data.ready) {
     values += "+" + String(data.temperature, 2);
     values += "+" + String(data.humidity, 2);
@@ -40,10 +45,43 @@ String buildValueString() {
   } else {
     values += "+0.00+0.00+0.00+0.00";
   }
+
   return values;
 }
 
-// ---------- Command Parser ----------
+// BME280 only (D1)
+String buildBMEString() {
+  SensorData data = getSensorData();
+
+  String values = String(sensorAddress);
+
+  if (data.ready) {
+    values += "+" + String(data.temperature, 2);
+    values += "+" + String(data.humidity, 2);
+    values += "+" + String(data.pressure, 2);
+  } else {
+    values += "+0.00+0.00+0.00";
+  }
+
+  return values;
+}
+
+// BH1750 only (D2)
+String buildLightString() {
+  SensorData data = getSensorData();
+
+  String values = String(sensorAddress);
+
+  if (data.ready) {
+    values += "+" + String(data.lux, 2);
+  } else {
+    values += "+0.00";
+  }
+
+  return values;
+}
+
+// ===================== COMMAND PARSER =====================
 void parseCommand(String cmd) {
   cmd.trim();
 
@@ -63,47 +101,74 @@ void parseCommand(String cmd) {
 
   String body = cmd.substring(1);
 
+  // ---------- Address change ----------
   if (body.length() == 2 && body.charAt(0) == 'A') {
     char newAddr = body.charAt(1);
+
     if (isAlphaNumeric(newAddr)) {
       sensorAddress = newAddr;
+
+      Serial.print("[INFO] New address: ");
+      Serial.println(newAddr);
+
       sdiSend(String(newAddr) + "\r\n");
     }
     return;
   }
 
+  // ---------- MEASURE ----------
   if (body == "M") {
     readSensors();
+
     int n = getParameterCount();
     String response = String(sensorAddress) + "003" + String(n);
 
     sdiSend(response + "\r\n");
     return;
-      }
+  }
 
-  if (body == "D0") {
-    String values = buildValueString();
-    sdiSend(values + "\r\n");
+  // ---------- DATA BME280 ----------
+  if (body == "D1") {
+    readSensors();
+
+    sdiSend(buildBMEString() + "\r\n");
     return;
   }
 
+  // ---------- DATA LIGHT ----------
+  if (body == "D2") {
+    readSensors();
+
+    sdiSend(buildLightString() + "\r\n");
+    return;
+  }
+
+  // ---------- ALL DATA ----------
   if (body == "R0") {
     readSensors();
-    sdiSend(buildValueString() + "\r\n");
+
+    sdiSend(buildAllString() + "\r\n");
     return;
   }
+
+  Serial.print("[WARN] Unknown command: ");
+  Serial.println(cmd);
 }
 
-// ---------- Public ----------
+// ===================== INIT =====================
 void sdi12Init(char address, int dirPin) {
   sensorAddress = address;
   DIRO_PIN = dirPin;
 
   Serial1.begin(SDI12_BAUD, SERIAL_7E1);
+
   pinMode(DIRO_PIN, OUTPUT);
   digitalWrite(DIRO_PIN, HIGH);
+
+  Serial.println("[SDI-12] Initialized");
 }
 
+// ===================== LOOP HANDLER =====================
 void sdi12Handle() {
   if (millis() < txLockoutUntil) return;
 
