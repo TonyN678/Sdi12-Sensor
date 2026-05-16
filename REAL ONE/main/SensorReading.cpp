@@ -83,3 +83,11 @@ int getParameterCount() {
 
   return count;
 }
+
+bool isBme280Ok() {
+  return bmeOK;
+}
+
+bool isBh1750Ok() {
+  return lightOK;
+}

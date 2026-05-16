@@ -16,4 +16,6 @@ void sensorsInit();
 void readSensors();
 SensorData getSensorData();
 int getParameterCount();
+bool isBme280Ok();
+bool isBh1750Ok();
 #endif
