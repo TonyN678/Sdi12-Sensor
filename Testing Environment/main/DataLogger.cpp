@@ -21,10 +21,28 @@ const char* logFileName = "datalog.csv";
 
 unsigned long lastLogTimeMs = 0;
 
+bool sdOk = false;
+bool rtcOk = false;
+
 Bounce debouncerManual;
 Bounce debouncerClear;
 
+void formatTimestamp(char* out, size_t outLen) {
+  if (rtcOk) {
+    DateTime now = rtc.now();
+    snprintf(out, outLen, "%04d-%02d-%02d %02d:%02d:%02d",
+             now.year(), now.month(), now.day(),
+             now.hour(), now.minute(), now.second());
+  } else {
+    unsigned long sec = millis() / 1000UL;
+    snprintf(out, outLen, "uptime_%lu", sec);
+  }
+}
+
 void appendCsvHeaderIfNew() {
+  if (!sdOk) {
+    return;
+  }
   if (sd.exists(logFileName)) {
     return;
   }
@@ -38,25 +56,40 @@ void appendCsvHeaderIfNew() {
   Serial.println(F("[Log] CSV header created."));
 }
 
-void logDataInternal(const char* source) {
-  DateTime now = rtc.now();
-
-  readSensors();
-  SensorData d = getSensorData();
-
-  char timestamp[20];
-  snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
-           now.year(), now.month(), now.day(),
-           now.hour(), now.minute(), now.second());
-
+void printLogToSerial(const char* source, const char* timestamp, const SensorData& d) {
   Serial.print(F("[Log] ("));
   Serial.print(source);
   Serial.print(F(") "));
   Serial.print(timestamp);
+  Serial.print(F(" "));
+  Serial.print(d.temperature, 2);
+  Serial.print(F("C "));
+  Serial.print(d.humidity, 1);
+  Serial.print(F("% "));
+  Serial.print(d.pressure, 1);
+  Serial.print(F("hPa "));
+  Serial.print(d.lux, 1);
+  Serial.println(F(" lx"));
+}
+
+void logDataInternal(const char* source) {
+  char timestamp[24];
+  formatTimestamp(timestamp, sizeof(timestamp));
+
+  readSensors();
+  SensorData d = getSensorData();
+
+  if (!sdOk) {
+    Serial.print(F("[Log] SD unavailable — serial only: "));
+    printLogToSerial(source, timestamp, d);
+    return;
+  }
 
   file = sd.open(logFileName, FILE_WRITE);
   if (!file) {
-    Serial.println(F(" — open failed."));
+    Serial.println(F("[Log] SD write failed (card removed?)."));
+    sdOk = false;
+    printLogToSerial(source, timestamp, d);
     return;
   }
 
@@ -78,6 +111,7 @@ void logDataInternal(const char* source) {
   }
 
   file.print(',');
+
   if (isBh1750Ok()) {
     file.print(d.lux, 2);
   }
@@ -86,19 +120,14 @@ void logDataInternal(const char* source) {
   file.println(source);
 
   file.close();
-
-  Serial.print(F(" "));
-  Serial.print(d.temperature, 2);
-  Serial.print(F("C "));
-  Serial.print(d.humidity, 1);
-  Serial.print(F("% "));
-  Serial.print(d.pressure, 1);
-  Serial.print(F("hPa "));
-  Serial.print(d.lux, 1);
-  Serial.println(F(" lx"));
+  printLogToSerial(source, timestamp, d);
 }
 
 void clearSdLogFile() {
+  if (!sdOk) {
+    Serial.println(F("[Log] SD unavailable — cannot clear."));
+    return;
+  }
   Serial.println(F("[Log] Clearing log file..."));
   if (sd.exists(logFileName)) {
     if (!sd.remove(logFileName)) {
@@ -110,7 +139,7 @@ void clearSdLogFile() {
   Serial.println(F("[Log] Log file reset."));
 }
 
-}  // END of namespace
+}  // namespace
 
 void dataLoggerInit() {
   pinMode(kBtnManualLogPin, INPUT_PULLUP);
@@ -121,27 +150,24 @@ void dataLoggerInit() {
   debouncerClear.attach(kBtnClearSdPin);
   debouncerClear.interval(50);
 
-  if (!rtc.begin()) {
-    Serial.println(F("[Log] ERROR: RTC not found."));
-    while (1) {
-      delay(1000);
-    }
-  }
-  if (!rtc.isrunning()) {
+  rtcOk = rtc.begin();
+  if (!rtcOk) {
+    Serial.println(F("[Log] WARN: RTC not found — timestamps use uptime."));
+  } else if (!rtc.isrunning()) {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     Serial.println(F("[Log] RTC stopped — time set from compile time."));
   }
 
-  if (!sd.begin(SD_CONFIG)) {
-    Serial.println(F("[Log] ERROR: SD init failed."));
-    while (1) {
-      delay(1000);
-    }
+  sdOk = sd.begin(SD_CONFIG);
+  if (!sdOk) {
+    Serial.println(F("[Log] WARN: SD card init failed — logging disabled, rest of system runs."));
+  } else {
+    appendCsvHeaderIfNew();
+    Serial.println(F("[Log] SD card ready."));
   }
 
-  appendCsvHeaderIfNew();
   lastLogTimeMs = millis();
-  Serial.println(F("[Log] Ready (60s auto + manual / clear buttons)."));
+  Serial.println(F("[Log] Buttons active (manual log / clear)."));
 }
 
 void dataLoggerUpdate() {
@@ -156,7 +182,9 @@ void dataLoggerUpdate() {
 
   if (debouncerManual.fell()) {
     logDataInternal("Manual");
-    Serial.println(F("[Log] Manual entry saved."));
+    if (sdOk) {
+      Serial.println(F("[Log] Manual entry saved to SD."));
+    }
   }
 
   if (debouncerClear.fell()) {
