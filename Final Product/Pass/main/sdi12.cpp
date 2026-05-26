@@ -104,16 +104,21 @@ void parseCommand(String cmd) {
 
   char cmdAddr = cmd.charAt(0);
 
-  if (cmd == "?") {
+//Hung
+//Address Query
+
+  if (cmd == "?") { 
     sdiSend(String(sensorAddress) + "\r\n");
-    return;
+    return; 
   }
 
   if (cmdAddr != sensorAddress) return;
 
   String body = cmd.substring(1);
 
+  //Hung Tran
   // ---------- Address change ----------
+  
   if (body.length() == 2 && body.charAt(0) == 'A') {
     char newAddr = body.charAt(1);
 
@@ -128,6 +133,7 @@ void parseCommand(String cmd) {
     return;
   }
 
+  //Hung Tran
   // ---------- MEASURE ----------
   if (body == "M") {
     readSensors();
