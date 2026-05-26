@@ -12,3 +12,4 @@ void sdiSend(String response);
 void parseCommand(String cmd);
 
 #endif
+// comment
