@@ -4,7 +4,7 @@
 #define SDI12_BAUD 1200
 #define TX_LOCKOUT_MS 50
 #define R0_STREAM_INTERVAL_MS 1000
-
+// hello tharniesh
 static char sensorAddress;
 static int DIRO_PIN;
 static unsigned long txLockoutUntil = 0;
