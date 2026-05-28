@@ -1,10 +1,10 @@
 #include "sdi12.h"
 #include "SensorReading.h"
-
+// test thu xem
 #define SDI12_BAUD 1200
 #define TX_LOCKOUT_MS 50
 #define R0_STREAM_INTERVAL_MS 1000
-
+// hello tharniesh
 static char sensorAddress;
 static int DIRO_PIN;
 static unsigned long txLockoutUntil = 0;
@@ -104,16 +104,21 @@ void parseCommand(String cmd) {
 
   char cmdAddr = cmd.charAt(0);
 
-  if (cmd == "?") {
+//Hung
+//Address Query
+
+  if (cmd == "?") { 
     sdiSend(String(sensorAddress) + "\r\n");
-    return;
+    return; 
   }
 
   if (cmdAddr != sensorAddress) return;
 
   String body = cmd.substring(1);
 
+  //Hung Tran
   // ---------- Address change ----------
+  
   if (body.length() == 2 && body.charAt(0) == 'A') {
     char newAddr = body.charAt(1);
 
@@ -128,6 +133,7 @@ void parseCommand(String cmd) {
     return;
   }
 
+  //Hung Tran
   // ---------- MEASURE ----------
   if (body == "M") {
     readSensors();
