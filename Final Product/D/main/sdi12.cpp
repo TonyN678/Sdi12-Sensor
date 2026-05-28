@@ -16,7 +16,6 @@ static bool streamR0 = false;
 static unsigned long lastStreamMs = 0;
 
 // ===================== TX =====================
-// Recieve data from sensors
 void sdiSend(String response) {
   digitalWrite(DIRO_PIN, LOW);
   delay(15);
@@ -25,7 +24,6 @@ void sdiSend(String response) {
   Serial1.flush();
 
   delay(10);
-  // high to send command to sensor
   digitalWrite(DIRO_PIN, HIGH);
 
   while (Serial1.available()) Serial1.read();
@@ -184,7 +182,6 @@ void sdi12Init(char address, int dirPin) {
 }
 
 // ===================== LOOP HANDLER =====================
-// filter hidden character
 void sdi12Handle() {
   if (millis() < txLockoutUntil) return;
 
