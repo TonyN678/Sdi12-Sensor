@@ -1,23 +1,19 @@
 #include "SensorSampler.h"
 #include "HardwareConfig.h"
 
-// This project targets Arduino Due (ATSAM3X8E) only.
-#ifndef __SAM3X8E__
-#error "Wrong board selected. In Arduino IDE choose: Tools > Board > Arduino Due."
-#endif
+#include <DueTimer.h>
 
-#include <sam.h>
+// DueTimer period in microseconds (2000 ms = 2 s sample tick)
+constexpr long kSamplePeriodUs =
+    static_cast<long>(kSensorSampleMs * 1000UL);
 
-// How many 10 ms hardware ticks make one kSensorSampleMs (2000 ms) sample request
-constexpr uint16_t kIsrTicksPerSample =
-    static_cast<uint16_t>(kSensorSampleMs / kHwTimerBasePeriodMs);
+// ----------------------------------------------------
+// Module state
+// ----------------------------------------------------
 
-// Due: TIMER_CLOCK4 = MCK/128; 10 ms tick => 100 Hz
-constexpr uint32_t kHwTimerTickHz = 1000U / kHwTimerBasePeriodMs;
+static volatile bool samplePending = false;
+volatile uint32_t g_hwTimerIsrCount = 0;
 
-static uint16_t isrTickDivider = 0;
-volatile uint8_t g_sampleTicksPending = 0;
-volatile uint32_t g_hwTimerIsrCount = 0;  // Debug: increments every ~10 ms if ISR runs
 static uint8_t samplesInCurrentWindow = 0;
 
 static float tempSum = 0.0f;
@@ -29,89 +25,74 @@ static uint16_t luxSampleCount = 0;
 
 static SensorData avgBuffer;
 static volatile bool newAverageAvailable = false;
-static volatile unsigned long ledPulseOffAtMs = 0;  // 0 = LED pulse inactive
+static volatile unsigned long ledPulseOffAtMs = 0;
 
-static inline void writeActivityLed(bool on) {
-  const uint8_t level = (on == kIsrActivityLedActiveHigh) ? HIGH : LOW;
-  digitalWrite(kIsrActivityLedPin, level);
+// ----------------------------------------------------
+// Autostart in Setup()
+// ----------------------------------------------------
+
+void sensorSamplerInit() {
+  pinMode(kIsrActivityLedPin, OUTPUT);
+  setActivityLed(false);
+
+  samplePending = false;
+  avgBuffer.ready = false;
+  newAverageAvailable = false;
+  samplesInCurrentWindow = 0;
+  ledPulseOffAtMs = 0;
+  tempSum = humidSum = pressSum = luxSum = 0.0f;
+  bmeSampleCount = luxSampleCount = 0;
+
+  Timer6.attachInterrupt(onSampleTimerISR);
+  Timer6.setPeriod(kSamplePeriodUs);
+  Timer6.start();
+
+  Serial.print(F("[Sampler] DueTimer6 every "));
+  Serial.print(kSensorSampleMs);
+  Serial.println(F(" ms (hardware timer)."));
 }
 
-// Turn LED on for exactly kIsrActivityLedPulseMs after a successful average (main loop timing).
-static void startActivityLedPulse() {
-  writeActivityLed(true);
-  ledPulseOffAtMs = millis() + kIsrActivityLedPulseMs;
+// ISR to request a sample every kSensorSampleMs
+static void onSampleTimerISR() {
+  g_hwTimerIsrCount++;
+  samplePending = true;
 }
 
-static void serviceActivityLedPulse() {
+// LED to pulse for 200ms after a successful average
+static void serviceActivityLed() {
   if (ledPulseOffAtMs == 0) {
     return;
   }
   if (static_cast<long>(millis() - ledPulseOffAtMs) >= 0) {
-    writeActivityLed(false);
+    setActivityLed(false);
     ledPulseOffAtMs = 0;
   }
 }
 
-static void printAverageReady() {
-  Serial.print(F("[Sampler] AVG ready T="));
-  Serial.print(avgBuffer.temperature, 2);
-  Serial.print(F("C H="));
-  Serial.print(avgBuffer.humidity, 2);
-  Serial.print(F("% P="));
-  Serial.print(avgBuffer.pressure, 2);
-  Serial.print(F("hPa L="));
-  Serial.print(avgBuffer.lux, 2);
-  Serial.println(F("lx"));
-}
+// Called from loop(), processes pending ISR ticks: read sensors and build averages
+void sensorSamplerService() {
+  serviceActivityLed();
 
-// Called from TC1_Handler every ~10 ms — no I2C/Wire/Serial here
-static void onHwTimerTick() {
-  g_hwTimerIsrCount++;
-  isrTickDivider++;
-  if (isrTickDivider >= kIsrTicksPerSample) {
-    isrTickDivider = 0;
-    g_sampleTicksPending++;
+  if (!samplePending) {
+    return;
+  }
+  // Disable interrupts to avoid race conditions
+  noInterrupts();
+  samplePending = false;
+  interrupts();
+
+  accumulateOneSample();
+  samplesInCurrentWindow++;
+
+  if (samplesInCurrentWindow >= kSamplesPerAverageWindow) {
+    finalizeAverageWindow();
+    samplesInCurrentWindow = 0;
   }
 }
 
-// Due timer channel TC1 = TC0 block, channel 1 (not used by default Servo library).
-// MUST call TC_GetStatus() every entry or the interrupt will not re-arm (SAM3X requirement).
-void TC1_Handler() {
-  TC_GetStatus(TC0, 1);
-  onHwTimerTick();
-}
-
-static void setupHwSampleTimer() {
-  // Pattern from Arduino Due timer examples (Copperhill / forum.arduino.cc #130423)
-  pmc_set_writeprotect(false);
-  pmc_enable_periph_clk(ID_TC1);
-
-  TC_Configure(TC0, 1,
-               TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK4);
-
-  const uint32_t rc = VARIANT_MCK / 128U / kHwTimerTickHz;
-  TC_SetRA(TC0, 1, rc / 2U);
-  TC_SetRC(TC0, 1, rc);
-  TC_Start(TC0, 1);
-
-  TC0->TC_CHANNEL[1].TC_IER = TC_IER_CPCS;
-  TC0->TC_CHANNEL[1].TC_IDR = ~TC_IER_CPCS;
-
-  NVIC_ClearPendingIRQ(TC1_IRQn);
-  NVIC_SetPriority(TC1_IRQn, 0);
-  NVIC_EnableIRQ(TC1_IRQn);
-}
-
-static void printBoardIdentity() {
-  const uint32_t rc = VARIANT_MCK / 128U / kHwTimerTickHz;
-  Serial.print(F("[Sampler] MCK="));
-  Serial.print(VARIANT_MCK);
-  Serial.print(F(" Hz, TC0 ch1 RC="));
-  Serial.print(rc);
-  Serial.print(F(" ("));
-  Serial.print(kHwTimerTickHz);
-  Serial.println(F(" Hz tick)"));
-}
+// ----------------------------------------------------
+// Sampling
+// ----------------------------------------------------
 
 static void accumulateOneSample() {
   readSensors();
@@ -139,17 +120,17 @@ static void finalizeAverageWindow() {
   }
 
   if (luxSampleCount > 0) {
-    const float n = static_cast<float>(luxSampleCount);
-    avgBuffer.lux = luxSum / n;
+    avgBuffer.lux = luxSum / static_cast<float>(luxSampleCount);
   }
 
   avgBuffer.ready = (bmeSampleCount > 0 || luxSampleCount > 0);
   newAverageAvailable = avgBuffer.ready;
+
   if (avgBuffer.ready) {
-    startActivityLedPulse();  // 200 ms ON after successful average
+    pulseActivityLed();  // 200 ms LED ON
     printAverageReady();
   } else {
-    Serial.println(F("[Sampler] AVG skipped (no valid sensor samples this window)."));
+    Serial.println(F("[Sampler] AVG skipped (no valid sensor samples)."));
   }
 
   tempSum = 0.0f;
@@ -160,48 +141,30 @@ static void finalizeAverageWindow() {
   luxSampleCount = 0;
 }
 
-void sensorSamplerInit() {
-  pinMode(kIsrActivityLedPin, OUTPUT);
-  writeActivityLed(false);
-  avgBuffer.ready = false;
-  newAverageAvailable = false;
-  g_sampleTicksPending = 0;
-  samplesInCurrentWindow = 0;
-  isrTickDivider = 0;
-  ledPulseOffAtMs = 0;
+// ----------------------------------------------------
+// LED
+// ----------------------------------------------------
 
-  setupHwSampleTimer();
-  printBoardIdentity();
-
-  Serial.print(F("[Sampler] HW timer "));
-  Serial.print(kSensorSampleMs);
-  Serial.print(F(" ms sample, "));
-  Serial.print(kSensorAverageMs);
-  Serial.println(F(" ms average."));
+static void pulseActivityLed() {
+  setActivityLed(true);
+  // LED stays on for 200ms after a successful average
+  ledPulseOffAtMs = millis() + kIsrActivityLedPulseMs;
 }
 
-void sensorSamplerService() {
-  serviceActivityLedPulse();  // End 200 ms LED pulse when elapsed
+static void setActivityLed(bool on) {
+  digitalWrite(kIsrActivityLedPin, HIGH);
+}
 
-  static bool timerAliveReported = false;
-  if (!timerAliveReported && g_hwTimerIsrCount > 0) {
-    timerAliveReported = true;
-    Serial.println(F("[Sampler] HW timer ISR is running."));
-  }
-
-  while (g_sampleTicksPending > 0) {
-    noInterrupts();
-    g_sampleTicksPending--;
-    interrupts();
-
-    accumulateOneSample();
-    samplesInCurrentWindow++;
-
-    if (samplesInCurrentWindow >= kSamplesPerAverageWindow) {
-      finalizeAverageWindow();
-      samplesInCurrentWindow = 0;
-    }
-  }
+static void printAverageReady() {
+  Serial.print(F("[Sampler] AVG ready T="));
+  Serial.print(avgBuffer.temperature, 2);
+  Serial.print(F("C H="));
+  Serial.print(avgBuffer.humidity, 2);
+  Serial.print(F("% P="));
+  Serial.print(avgBuffer.pressure, 2);
+  Serial.print(F("hPa L="));
+  Serial.print(avgBuffer.lux, 2);
+  Serial.println(F("lx"));
 }
 
 SensorData getAveragedSensorData() {

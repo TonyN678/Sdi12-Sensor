@@ -23,19 +23,15 @@ constexpr uint8_t kTftSclkPin = 13;
 constexpr unsigned long kLogIntervalMs = 60000UL;
 constexpr unsigned long kDashboardRefreshMs = 1000UL;
 
-// Arduino Due hardware timer: one I2C sample request every 2 s.
-constexpr unsigned long kSensorSampleMs = 2000UL;
-// Average window: one sample every 2 s → one averaged row every 2 s.
-constexpr unsigned long kSensorAverageMs = 2000UL;
-constexpr uint8_t kSamplesPerAverageWindow =
-    static_cast<uint8_t>(kSensorAverageMs / kSensorSampleMs);
-// HW timer ISR base tick (10 ms); ISR divides down to kSensorSampleMs (2 s).
-constexpr unsigned long kHwTimerBasePeriodMs = 10UL;
+// Arduino Due DueTimer: one I2C sample request every 2 s.
+constexpr unsigned long kSensorSampleMs = 2000UL;   // 2s sample period
+constexpr uint8_t kSamplesPerAverageWindow = 10;    // average of 10 samples
+
+
 // External activity LED pin (you set this to D9).
 constexpr uint8_t kIsrActivityLedPin = 9;
-// Set false if your external LED is wired active-low.
-constexpr bool kIsrActivityLedActiveHigh = true;
-// Visible pulse length on each 2 s sample event.
+
+// LED stays on for 200ms after a successful average
 constexpr unsigned long kIsrActivityLedPulseMs = 200UL;
 
 #endif
