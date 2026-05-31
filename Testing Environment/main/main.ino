@@ -7,9 +7,10 @@
 #include "Dashboard.h"
 #include "Watchdog.h"
 
-#define DIRO_PIN 8   // pin 7 is TFT_DC
+#define DIRO_PIN 8
 #define MY_ADDRESS '0'
 
+// Initialise sensors, SD card, timer sampler, loggers, dashboard, SDI-12, and watchdog
 void setup() {
   Serial.begin(9600);
 
@@ -22,24 +23,27 @@ void setup() {
   sdi12Init(MY_ADDRESS, DIRO_PIN);
 
   readSensors();
-  watchdogInit();  // Enable auto-recovery if firmware hangs.
+  watchdogInit();
 
   Serial.println(F("SDI-12 slave + ISR sampler + loggers + dashboard ready."));
 }
 
+// Continuously run the main system tasks and reset the watchdog timer
 void loop() {
-  watchdogKick();  // Start-of-loop heartbeat.
+  watchdogKick();
 
-  // Drain hardware timer flags and run I2C reads (timing set by TC4, not loop speed).
   sensorSamplerService();
-  watchdogKick();  // Keep watchdog fed between major tasks.
+  watchdogKick();
 
   sdi12Handle();
-  watchdogKick();  // Keep watchdog fed between major tasks.
+  watchdogKick();
+
   avgDataLoggerUpdate();
-  watchdogKick();  // Keep watchdog fed between major tasks.
+  watchdogKick();
+
   dataLoggerUpdate();
-  watchdogKick();  // Keep watchdog fed between major tasks.
+  watchdogKick();
+
   dashboardUpdate();
-  watchdogKick();  // End-of-loop heartbeat.
+  watchdogKick();
 }
