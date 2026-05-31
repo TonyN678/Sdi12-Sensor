@@ -1,5 +1,5 @@
 #include "SdCard.h"  // Public API for shared SD and RTC access
-#include "HardwareConfig.h"  // Pin constants (kSdCsPin, soft SPI pins)
+#include "HardwareConfig.h"  // Pin constants (SdCsPin, soft SPI pins)
 
 #include <RTClib.h>  // DS1307 RTC driver
 #include <SdFat.h>   // SD card filesystem
@@ -7,8 +7,8 @@
 namespace {  // File-local symbols: not visible outside this .cpp
 
 SdFs sd;  // One filesystem object for the whole project
-SoftSpiDriver<kSoftMisoPin, kSoftMosiPin, kSoftSckPin> softSpi;  // Bit-banged SPI for SD
-#define SD_CONFIG SdSpiConfig(kSdCsPin, SHARED_SPI, SD_SCK_MHZ(4), &softSpi)  // SD chip select + 4 MHz
+SoftSpiDriver<SoftMisoPin, SoftMosiPin, SoftSckPin> softSpi;  // Bit-banged SPI for SD
+#define SD_CONFIG SdSpiConfig(SdCsPin, SHARED_SPI, SD_SCK_MHZ(4), &softSpi)  // SD chip select + 4 MHz
 
 RTC_DS1307 rtc;  // Real-time clock on I2C (Wire)
 

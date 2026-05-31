@@ -3,9 +3,7 @@
 
 #include "SensorReading.h"  // SensorData struct and readSensors()
 
-// HW timer ISR requests a sample every kSensorSampleMs (2 s); call sensorSamplerService() from loop().
-extern volatile uint32_t g_hwTimerIsrCount;  // Increments each ~10 ms ISR (0 = timer not firing)
-
+// HW timer ISR requests a sample every SensorSamplerInMs (2 s); call sensorSamplerService() from loop().
 static void setActivityLed(bool on);
 static void onSampleTimerISR();
 static void serviceActivityLed();

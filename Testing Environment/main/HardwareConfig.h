@@ -3,35 +3,37 @@
 
 #include <Arduino.h>
 
-// SD card (soft SPI) — same wiring as project.ino
-constexpr uint8_t kSdCsPin = A3;
-constexpr uint8_t kSoftMisoPin = 12;
-constexpr uint8_t kSoftMosiPin = 11;
-constexpr uint8_t kSoftSckPin = 13;
+// SD card — same wiring as schematic in file SdCard.cpp
+constexpr uint8_t SdCsPin = A3;
+constexpr uint8_t SoftMisoPin = 12;
+constexpr uint8_t SoftMosiPin = 11;
+constexpr uint8_t SoftSckPin = 13;
 
-// Pushbuttons: active LOW with INPUT_PULLUP
-constexpr int kBtnManualLogPin = 2;
-constexpr int kBtnClearSdPin = 3;
+// Pushbuttons in file DataLogger.cpp
+constexpr int ManualDataLogToSDcardButton = 2;
+constexpr int ClearSdButton = 3;
 
-// ST7735 TFT (hardware SPI — shares MOSI/SCK with SD soft SPI)
-constexpr uint8_t kTftCsPin = 10;
-constexpr uint8_t kTftDcPin = 7;
-constexpr uint8_t kTftRstPin = 6;
-constexpr uint8_t kTftMosiPin = 11;
-constexpr uint8_t kTftSclkPin = 13;
+// ST7735 TFT in file Dashboard.cpp
+constexpr uint8_t TftCsPin = 10;
+constexpr uint8_t TftDcPin = 7;
+constexpr uint8_t TftRstPin = 6;
+constexpr uint8_t TftMosiPin = 11;
+constexpr uint8_t TftSclkPin = 13;
 
-constexpr unsigned long kLogIntervalMs = 60000UL;
-constexpr unsigned long kDashboardRefreshMs = 1000UL;
+// Logging interval (1 minute) in file DataLogger.cpp
+constexpr unsigned long LogIntervalRate = 60000UL;
+// Dashboard refresh interval (1 second) in file Dashboard.cpp
+constexpr unsigned long DashboardRefreshRate = 1000UL;
 
-// Arduino Due DueTimer: one I2C sample request every 2 s.
-constexpr unsigned long kSensorSampleMs = 2000UL;   // 2s sample period
-constexpr uint8_t kSamplesPerAverageWindow = 10;    // average of 10 samples
+// Sample the averaged sensor data every 2s in file SensorSampler.cpp
+constexpr unsigned long SensorSamplerInMs = 2000UL;   
+constexpr uint8_t NumberOfSamplePerAvg = 10;    // average of 10 samples
 
 
 // External activity LED pin (you set this to D9).
-constexpr uint8_t kIsrActivityLedPin = 9;
+constexpr uint8_t LedPin = 9;
 
-// LED stays on for 200ms after a successful average
-constexpr unsigned long kIsrActivityLedPulseMs = 200UL;
+// Visible pulse length on each 2 s sample event.
+constexpr unsigned long LedPulseMs = 200UL;
 
 #endif

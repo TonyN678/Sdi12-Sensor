@@ -4,15 +4,10 @@
 #include <DueTimer.h>
 
 // DueTimer period in microseconds (2000 ms = 2 s sample tick)
-constexpr long kSamplePeriodUs =
-    static_cast<long>(kSensorSampleMs * 1000UL);
+constexpr long SensorSamplePeriodInMicroSec =
+    static_cast<long>(SensorSamplerInMs * 1000UL);
 
-// ----------------------------------------------------
-// Module state
-// ----------------------------------------------------
-
-static volatile bool samplePending = false;
-volatile uint32_t g_hwTimerIsrCount = 0;
+static volatile bool SampleAverageState = false;
 
 static uint8_t samplesInCurrentWindow = 0;
 
@@ -27,15 +22,12 @@ static SensorData avgBuffer;
 static volatile bool newAverageAvailable = false;
 static volatile unsigned long ledPulseOffAtMs = 0;
 
-// ----------------------------------------------------
-// Autostart in Setup()
-// ----------------------------------------------------
-
+// Start the interupt timer, called in Setup() in main.ino
 void sensorSamplerInit() {
-  pinMode(kIsrActivityLedPin, OUTPUT);
+  pinMode(LedPin, OUTPUT);
   setActivityLed(false);
 
-  samplePending = false;
+  SampleAverageState = false;
   avgBuffer.ready = false;
   newAverageAvailable = false;
   samplesInCurrentWindow = 0;
@@ -44,18 +36,17 @@ void sensorSamplerInit() {
   bmeSampleCount = luxSampleCount = 0;
 
   Timer6.attachInterrupt(onSampleTimerISR);
-  Timer6.setPeriod(kSamplePeriodUs);
+  Timer6.setPeriod(SensorSamplePeriodInMicroSec);
   Timer6.start();
 
-  Serial.print(F("[Sampler] DueTimer6 every "));
-  Serial.print(kSensorSampleMs);
+  Serial.print(F("[SensorSampler] DueTimer6 every "));
+  Serial.print(SensorSamplerInMs);
   Serial.println(F(" ms (hardware timer)."));
 }
 
-// ISR to request a sample every kSensorSampleMs
+// ISR to request a sample every 2s
 static void onSampleTimerISR() {
-  g_hwTimerIsrCount++;
-  samplePending = true;
+  SampleAverageState = true;
 }
 
 // LED to pulse for 200ms after a successful average
@@ -69,31 +60,28 @@ static void serviceActivityLed() {
   }
 }
 
-// Called from loop(), processes pending ISR ticks: read sensors and build averages
+// Called from loop(), Read sensors and build averages
 void sensorSamplerService() {
   serviceActivityLed();
 
-  if (!samplePending) {
+  if (!SampleAverageState) {
     return;
   }
-  // Disable interrupts to avoid race conditions
+  // Time-Freezing the Timer to intefere
   noInterrupts();
-  samplePending = false;
+  SampleAverageState = false;
   interrupts();
 
   accumulateOneSample();
   samplesInCurrentWindow++;
 
-  if (samplesInCurrentWindow >= kSamplesPerAverageWindow) {
+  if (samplesInCurrentWindow >= NumberOfSamplePerAvg) {
     finalizeAverageWindow();
     samplesInCurrentWindow = 0;
   }
 }
 
-// ----------------------------------------------------
-// Sampling
-// ----------------------------------------------------
-
+// Sum up all the data to make 1 sample
 static void accumulateOneSample() {
   readSensors();
   const SensorData sample = getSensorData();
@@ -111,23 +99,24 @@ static void accumulateOneSample() {
   }
 }
 
+// Calculate average result after n=10 samples and reset sum&count to 0 for next trial
 static void finalizeAverageWindow() {
   if (bmeSampleCount > 0) {
-    const float n = static_cast<float>(bmeSampleCount);
+    const float n = bmeSampleCount;
     avgBuffer.temperature = tempSum / n;
     avgBuffer.humidity = humidSum / n;
     avgBuffer.pressure = pressSum / n;
   }
 
   if (luxSampleCount > 0) {
-    avgBuffer.lux = luxSum / static_cast<float>(luxSampleCount);
+    avgBuffer.lux = luxSum / luxSampleCount;
   }
 
   avgBuffer.ready = (bmeSampleCount > 0 || luxSampleCount > 0);
   newAverageAvailable = avgBuffer.ready;
 
   if (avgBuffer.ready) {
-    pulseActivityLed();  // 200 ms LED ON
+    pulseActivityLed();  
     printAverageReady();
   } else {
     Serial.println(F("[Sampler] AVG skipped (no valid sensor samples)."));
@@ -141,20 +130,18 @@ static void finalizeAverageWindow() {
   luxSampleCount = 0;
 }
 
-// ----------------------------------------------------
-// LED
-// ----------------------------------------------------
-
+// D9 LED stays on for 200ms after a successful average
 static void pulseActivityLed() {
   setActivityLed(true);
-  // LED stays on for 200ms after a successful average
-  ledPulseOffAtMs = millis() + kIsrActivityLedPulseMs;
+  ledPulseOffAtMs = millis() + LedPulseMs;
 }
 
-static void setActivityLed(bool on) {
-  digitalWrite(kIsrActivityLedPin, HIGH);
+//  Turn the D9 LED on or off
+static void setActivityLed(bool state) {
+  digitalWrite(LedPin, (state) ? HIGH : LOW);
 }
 
+// Print successful Sampling Average
 static void printAverageReady() {
   Serial.print(F("[Sampler] AVG ready T="));
   Serial.print(avgBuffer.temperature, 2);
@@ -167,14 +154,17 @@ static void printAverageReady() {
   Serial.println(F("lx"));
 }
 
+// Average Data saved in avgBuffer class, ready for access
 SensorData getAveragedSensorData() {
   return avgBuffer;
 }
 
+// Average Sensor Data is Ready or Not
 bool isAveragedSensorDataReady() {
   return newAverageAvailable;
 }
 
+// Clear flag so same average is not logged twice
 void sensorSamplerAcknowledgeAverage() {
   newAverageAvailable = false;
 }
