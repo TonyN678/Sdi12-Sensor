@@ -47,11 +47,11 @@ void sdiSend(String response) {
 
   txLockoutUntil = millis() + TX_LOCKOUT_MS;  
 
-  Serial.print("[TX] ");
-  Serial.println(response);
+  //Serial.print("[TX] ");
+  //Serial.println(response);
 }
 
-// Builders for different data types
+// Builds the R0 string for both BME280 and BH1750 (4 parameters)
 String buildAllString() {
   SensorData data = getSensorData();  
 
@@ -66,14 +66,14 @@ String buildAllString() {
     values += "+0.00+0.00+0.00+0.00";
   }
 
-  return values;  // Return full R0 payload string
+  return values;  
 }
 
-// BME280 only (D1)
+// Returns the BME280 data (temperature, humidity, pressure) with D1 command
 String buildBMEString() {
-  SensorData data = getSensorData();  // Snapshot latest sensor values
+  SensorData data = getSensorData();  
 
-  String values = String(sensorAddress);  // Prefix with sensor address
+  String values = String(sensorAddress);  
 
   if (data.ready) {
     values += "+" + String(data.temperature, 2);
@@ -83,14 +83,14 @@ String buildBMEString() {
     values += "+0.00+0.00+0.00";
   }
 
-  return values;  // Return D1 payload (temperature/humidity/pressure)
+  return values;  
 }
 
-// BH1750 only (D2)
+// Returns the BH1750 data (lux) with D2 command
 String buildLightString() {
-  SensorData data = getSensorData();  // Snapshot latest sensor values
+  SensorData data = getSensorData();  
 
-  String values = String(sensorAddress);  // Prefix with sensor address
+  String values = String(sensorAddress);  
 
   if (data.ready) {
     values += "+" + String(data.lux, 2);
@@ -98,43 +98,37 @@ String buildLightString() {
     values += "+0.00";
   }
 
-  return values;  // Return D2 payload (lux only)
+  return values;  
 }
 
+// Resets the parser state to IDLE by clearing the command buffer and resetting the state
 static void resetParser() {
-  rxLen = 0;  // Clear length counter
-  rxCmd[0] = '\0';  // Make buffer an empty C-string
-  parserState = ParserState::IDLE;  // Return FSM to waiting state
+  rxLen = 0;  
+  rxCmd[0] = '\0';  
+  parserState = ParserState::IDLE;  
 }
 
-// ===================== COMMAND PARSER =====================
+// Parses the command and returns the response
 static String parseCommandInternal(const String& cmdInput) {
-  //at the start of parseCommand(), streamR0 is cleared,
-  // so 0M!, 0D1!, ?, address change, etc. all stop streaming before that command is handled.
   streamR0 = false;
 
-  String cmd = cmdInput;  // Make mutable copy so trim() doesn't modify caller-owned string
-  cmd.trim();  // Remove accidental spaces/newlines around command text
+  String cmd = cmdInput;  
+  cmd.trim();  
 
-  // Debug only
-  //Serial.print("[RX] ");
-  //Serial.println(cmd);
+  if (cmd.length() == 0) return "";  
 
-  if (cmd.length() == 0) return "";  // Ignore empty frames
-
-  char cmdAddr = cmd.charAt(0);  // First character is the address (or '?' query)
+  char cmdAddr = cmd.charAt(0);  
 
   if (cmd == "?") {
     return String(sensorAddress) + "\r\n";
   }
 
-  if (cmdAddr != sensorAddress) return "";  // Ignore commands addressed to other sensors
+  if (cmdAddr != sensorAddress) return "";  
 
-  String body = cmd.substring(1);  // Command content after address
+  String body = cmd.substring(1);  
 
-  // ---------- Address change ----------
   if (body.length() == 2 && body.charAt(0) == 'A') {
-    char newAddr = body.charAt(1);  // Requested new address value
+    char newAddr = body.charAt(1);  
 
     if (isAlphaNumeric(newAddr)) {
       sensorAddress = newAddr;
@@ -147,31 +141,27 @@ static String parseCommandInternal(const String& cmdInput) {
     return "";
   }
 
-  // ---------- MEASURE ----------
   if (body == "M") {
     readSensors();
 
-    int n = getParameterCount();  // Number of parameters that D-command can return
-    String response = String(sensorAddress) + "003" + String(n);  // "ttt n" style SDI-12 measure reply
+    int n = getParameterCount();  
+    String response = String(sensorAddress) + "003" + String(n);  
 
     return response + "\r\n";
   }
 
-  // ---------- DATA BME280 ----------
   if (body == "D1") {
     readSensors();
 
     return buildBMEString() + "\r\n";
   }
 
-  // ---------- DATA LIGHT ----------
   if (body == "D2") {
     readSensors();
 
     return buildLightString() + "\r\n";
   }
 
-  // ---------- ALL DATA (continuous until next command) ----------
   if (body == "R0") {
     readSensors();
 
@@ -185,107 +175,110 @@ static String parseCommandInternal(const String& cmdInput) {
   return "";
 }
 
+// Receives a command and sends the response using the parseCommandInternal function above
 void parseCommand(String cmd) {
-  const String response = parseCommandInternal(cmd);  // Build response using same core parser
+  const String response = parseCommandInternal(cmd);  
   if (response.length() > 0) {
-    sdiSend(response);  // Send only when parser produced a valid response
+    sdiSend(response);  
   }
 }
 
+// Checks if the character is a valid command character like A, D1, D2, R0, etc.
 static bool isValidCommandChar(char ch) {
-  return isAlphaNumeric(ch) || ch == '?';  // Allowed payload chars for this command set
+  return isAlphaNumeric(ch) || ch == '?';  
 }
 
+// Finite State Machine (FSM) logic to receive a byte and process the new state + action
 static void fsmReceiveByte(char ch) {
   switch (parserState) {
     case ParserState::IDLE:
       if (isValidCommandChar(ch)) {
-        rxLen = 0;  // Start a fresh frame
-        rxCmd[rxLen++] = ch;  // Save first byte
-        rxCmd[rxLen] = '\0';  // Keep C-string termination valid after append
-        lastRxByteMs = millis();  // Record byte time for timeout detection
-        parserState = ParserState::RECEIVE;  // Move FSM into receive mode
+        rxLen = 0;  
+        rxCmd[rxLen] = ch;
+        rxLen++;
+        rxCmd[rxLen] = '\0';
+        lastRxByteMs = millis();  
+        parserState = ParserState::RECEIVE;  
       }
       break;  // Done handling byte in IDLE
 
     case ParserState::RECEIVE:
       if (ch == '!') {
-        parserState = ParserState::COMMAND_END;  // End-of-frame marker received
+        parserState = ParserState::COMMAND_END;  
       } else if (isValidCommandChar(ch)) {
         if (rxLen >= CMD_MAX_LEN) {
-          Serial.println(F("[WARN] SDI cmd overflow, dropping frame."));  // Frame too long => invalid
-          resetParser();  // Abort frame and recover parser
+          Serial.println(F("[WARN] SDI cmd overflow, dropping frame."));  
+          resetParser();  
         } else {
-          rxCmd[rxLen++] = ch;  // Append next valid byte to command buffer
-          rxCmd[rxLen] = '\0';  // Keep buffer null-terminated
-          lastRxByteMs = millis();  // Refresh timeout reference for active frame
+          rxCmd[rxLen] = ch;
+          rxLen++;
+          rxCmd[rxLen] = '\0';
+          lastRxByteMs = millis();
         }
       } else {
-        Serial.println(F("[WARN] SDI invalid char, dropping frame."));  // Corrupted character
-        resetParser();  // Abort bad frame and wait for next clean one
+        Serial.println(F("[WARN] SDI invalid char, dropping frame."));  
+        resetParser();  
       }
-      break;  // Done handling byte in RECEIVE
+      break;  
 
     default:
-      // COMMAND_END/PROCESSING/SEND_OUTPUT are advanced by loop state machine.
-      break;  // Other states advance in sdi12Handle(), not here
+      break;  
   }
 }
 
-// ===================== INIT =====================
+// Initializes the SDI-12 interface by setting the address and direction pin
 void sdi12Init(char address, int dirPin) {
-  sensorAddress = address;  // Store initial SDI-12 sensor address
-  DIRO_PIN = dirPin;  // Store transceiver direction pin
+  sensorAddress = address;  
+  DIRO_PIN = dirPin;  
 
-  Serial1.begin(SDI12_BAUD, SERIAL_7E1);  // SDI-12 UART settings: 1200 baud, 7E1
+  Serial1.begin(SDI12_BAUD, SERIAL_7E1);  
 
-  pinMode(DIRO_PIN, OUTPUT);  // Configure direction pin as output
-  digitalWrite(DIRO_PIN, HIGH);  // Default to listen mode (RX)
+  pinMode(DIRO_PIN, OUTPUT);  
+  digitalWrite(DIRO_PIN, HIGH);  
 
-  Serial.println("[SDI-12] Initialized");  // Startup trace line
+  Serial.println("[SDI-12] Initialized");  
 }
 
-// ===================== LOOP HANDLER =====================
+// Main loop function that handles the SDI-12 interface (called in loop() in main.ino)
 void sdi12Handle() {
-  if (millis() < txLockoutUntil) return;  // Ignore RX during post-TX lockout period
+  if (millis() < txLockoutUntil) return;  
 
   while (Serial1.available() && parserState != ParserState::SEND_OUTPUT) {
-    const int c = Serial1.read();  // Read one raw UART byte
+    const int c = Serial1.read();  
 
-    if (c < 32 || c > 126) continue;  // Ignore non-printable/non-ASCII bytes
+    if (c < 32 || c > 126) continue;  
 
-    fsmReceiveByte(static_cast<char>(c));  // Feed sanitized byte into FSM
+    fsmReceiveByte(static_cast<char>(c));  
   }
 
   if (parserState == ParserState::RECEIVE) {
-    const unsigned long now = millis();  // Current time for frame-timeout check
+    const unsigned long now = millis();  
     if (now - lastRxByteMs > CMD_FRAME_TIMEOUT_MS) {
-      Serial.println(F("[WARN] SDI frame timeout, dropping partial command."));  // Incomplete frame
-      resetParser();  // Clear partial command and recover
+      Serial.println(F("[WARN] SDI frame timeout, dropping partial command."));  
+      resetParser();  
     }
   }
 
   if (parserState == ParserState::COMMAND_END) {
-    parserState = ParserState::PROCESSING;  // Transition to parse/dispatch phase
+    parserState = ParserState::PROCESSING;  
   }
 
   if (parserState == ParserState::PROCESSING) {
-    pendingResponse = parseCommandInternal(String(rxCmd));  // Build response for complete frame
-    parserState = ParserState::SEND_OUTPUT;  // Move to TX stage (or no-op if empty)
+    pendingResponse = parseCommandInternal(String(rxCmd));  
+    parserState = ParserState::SEND_OUTPUT;  
   }
 
   if (parserState == ParserState::SEND_OUTPUT) {
     if (pendingResponse.length() > 0) {
-      sdiSend(pendingResponse);  // Send response to SDI-12 master
+      sdiSend(pendingResponse);  
     }
-    pendingResponse = "";  // Clear response buffer for next frame
-    resetParser();  // Return parser to IDLE for next command
+    pendingResponse = "";  
+    resetParser();  
   }
 
-  // Stream R0 every R0_STREAM_INTERVAL_MS
   if (streamR0 && (millis() - lastStreamMs >= R0_STREAM_INTERVAL_MS)) {
-    readSensors();  // Refresh sensor values before periodic stream send
-    sdiSend(buildAllString() + "\r\n");  // Push one new R0 frame
-    lastStreamMs = millis();  // Update stream timestamp for next interval
+    readSensors();  
+    sdiSend(buildAllString() + "\r\n");  
+    lastStreamMs = millis();  
   }
 }
