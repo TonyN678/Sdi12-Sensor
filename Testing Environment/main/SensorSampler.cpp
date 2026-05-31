@@ -4,8 +4,7 @@
 #include <DueTimer.h>
 
 // DueTimer period in microseconds (2000 ms = 2 s sample tick)
-constexpr long SensorSamplePeriodInMicroSec =
-    static_cast<long>(SensorSamplerInMs * 1000UL);
+constexpr long SensorSamplePeriodInMicroSec = SensorSamplerInMs * 1000UL;
 
 static volatile bool SampleAverageState = false;
 
@@ -159,12 +158,12 @@ SensorData getAveragedSensorData() {
   return avgBuffer;
 }
 
-// Average Sensor Data is Ready or Not
+// Average Sensor Data is Ready or Not, , ready for access
 bool isAveragedSensorDataReady() {
   return newAverageAvailable;
 }
 
-// Clear flag so same average is not logged twice
+// Clear flag so same average is not logged twice, , ready for access
 void sensorSamplerAcknowledgeAverage() {
   newAverageAvailable = false;
 }

@@ -1,16 +1,17 @@
-#include "sdi12.h"  // SDI-12 API declarations (init/handle/send/parse)
-#include "SensorReading.h"  // Sensor read helpers + SensorData access
+#include "sdi12.h"  
+#include "SensorReading.h"  
 
-#define SDI12_BAUD 1200  // SDI-12 required baud rate
-#define TX_LOCKOUT_MS 50  // Ignore RX for a short time after TX to avoid echo/noise
-#define R0_STREAM_INTERVAL_MS 1000  // Continuous R0 response interval in ms
-#define CMD_FRAME_TIMEOUT_MS 120  // Drop partial command if no new byte arrives in this time
-#define CMD_MAX_LEN 16  // Maximum accepted command payload length (without '!')
+#define SDI12_BAUD 1200  
+#define TX_LOCKOUT_MS 50  
+#define R0_STREAM_INTERVAL_MS 1000  
+#define CMD_FRAME_TIMEOUT_MS 120  
+#define CMD_MAX_LEN 16  
 
-static char sensorAddress;  // Current SDI-12 address for this sensor node
-static int DIRO_PIN;  // Direction-control pin for RS485/line driver
-static unsigned long txLockoutUntil = 0;  // Timestamp until RX is temporarily ignored
+static char sensorAddress;  
+static int DIRO_PIN;  
+static unsigned long txLockoutUntil = 0;  
 
+// Finite State Machine (FSM) states
 enum class ParserState : uint8_t {
   IDLE,  // Waiting for the first valid character
   RECEIVE,  // Collecting incoming command bytes
@@ -19,43 +20,42 @@ enum class ParserState : uint8_t {
   SEND_OUTPUT  // Sending response back to master (if any)
 };
 
-static ParserState parserState = ParserState::IDLE;  // Current parser FSM state
-static char rxCmd[CMD_MAX_LEN + 1] = {0};  // Fixed command buffer (+1 for null terminator)
-static uint8_t rxLen = 0;  // Number of bytes currently stored in rxCmd
-static unsigned long lastRxByteMs = 0;  // Last time a valid RX byte was accepted
-static String pendingResponse = "";  // Response prepared in PROCESSING, sent in SEND_OUTPUT
+// Starting state of the parser FSM
+static ParserState parserState = ParserState::IDLE;  
+
+static char rxCmd[CMD_MAX_LEN + 1] = {0}; 
+static uint8_t rxLen = 0;  
+static unsigned long lastRxByteMs = 0;  
+static String pendingResponse = "";  
 
 // R0 streaming state
-static bool streamR0 = false;  // True while periodic R0 streaming mode is active
-static unsigned long lastStreamMs = 0;  // Last timestamp when streamed R0 was sent
+static bool streamR0 = false;  
+static unsigned long lastStreamMs = 0;  
 
-// ===================== TX =====================
+// DIRO Pin LOW to Send Data to SDI-12 on PC, HIGH to Receive commands from SDI-12 on PC
 void sdiSend(String response) {
-  digitalWrite(DIRO_PIN, LOW);  // Switch transceiver to TX mode
-  delay(15);  // Allow line driver to settle before writing bytes
+  digitalWrite(DIRO_PIN, LOW);  
+  delay(15);  
 
-  Serial1.print(response);  // Send already-formatted SDI-12 response
-  Serial1.flush();  // Wait until UART shift register is empty
+  Serial1.print(response);  
+  Serial1.flush();  
 
-  delay(10);  // Small hold-time to ensure final bit fully exits line
-  digitalWrite(DIRO_PIN, HIGH);  // Return transceiver to RX/listen mode
+  delay(10);  
+  digitalWrite(DIRO_PIN, HIGH);  
 
-  while (Serial1.available()) Serial1.read();  // Drain any echoed bytes/noise left in UART RX
+  while (Serial1.available()) Serial1.read();  
 
-  txLockoutUntil = millis() + TX_LOCKOUT_MS;  // Start temporary RX lockout window
+  txLockoutUntil = millis() + TX_LOCKOUT_MS;  
 
-  // Debug only
-  //Serial.print("[TX] ");
-  //Serial.println(response);
+  Serial.print("[TX] ");
+  Serial.println(response);
 }
 
-// ===================== BUILDERS =====================
-
-// Full system (R0)
+// Builders for different data types
 String buildAllString() {
-  SensorData data = getSensorData();  // Snapshot latest sensor values
+  SensorData data = getSensorData();  
 
-  String values = String(sensorAddress);  // SDI-12 response must start with sensor address
+  String values = String(sensorAddress);  
 
   if (data.ready) {
     values += "+" + String(data.temperature, 2);
