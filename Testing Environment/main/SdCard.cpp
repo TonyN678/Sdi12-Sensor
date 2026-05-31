@@ -11,7 +11,6 @@ SdFs sd;  // One filesystem object for the whole project
 SoftSpiDriver<SoftMisoPin, SoftMosiPin, SoftSckPin> softSpi;  // Bit-banged SPI for SD
 #define SD_CONFIG SdSpiConfig(SdCsPin, SHARED_SPI, SD_SCK_MHZ(4), &softSpi)  // SD chip select + 4 MHz
 
-#define SD_CONFIG SdSpiConfig(kSdCsPin, SHARED_SPI, SD_SCK_MHZ(4), &softSpi)
 
 RTC_DS1307 rtc;
 
