@@ -1,10 +1,11 @@
-#ifndef AVGDATALOGGER_H  // Include guard start
-#define AVGDATALOGGER_H  // Define guard macro
+#ifndef AVGDATALOGGER_H  
+#define AVGDATALOGGER_H  
 
-#include <Arduino.h>  // Core types used by logger API
+#include <Arduino.h>  
 
-// Writes hardware-averaged rows to avg_datalog.csv (separate from datalog.csv).
-void avgDataLoggerInit();  // Create avg_datalog.csv header if file is new
-void avgDataLoggerUpdate();  // Append one row when sensorSampler reports new average
 
-#endif  // Include guard end
+void avgDataLoggerInit();  
+void avgDataLoggerUpdate();  
+
+#endif  
+// contains all functions and variables related to logging averaged sensor data to avgdatalogger.cpp
