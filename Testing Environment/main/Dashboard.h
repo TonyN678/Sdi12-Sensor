@@ -3,10 +3,9 @@
 
 #include <Arduino.h>
 
-// Initialize TFT dashboard (call once in setup)
 void dashboardInit();
 
-// Update values on screen (call in loop)
 void dashboardUpdate();
 
 #endif
+//contains all variables and functions to intialize and update the TFT dashboard display, that are referred to in Dashboard.cpp
