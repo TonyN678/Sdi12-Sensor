@@ -12,7 +12,7 @@ static SensorData sensorBuffer;
 void sensorsInit() {
   Wire.begin();
 
-  // Initialize sensors and capture status
+  
   lightOK = lightMeter.begin();
   bmeOK   = bme.begin(0x76);
 
@@ -40,7 +40,7 @@ void readSensors() {
     sensorBuffer.pressure    = pres / 100.0;
   }
 
-  // ---- BH1750 ----
+  
   float lux = lightMeter.readLightLevel();
 
   if (isnan(lux) || lux < 0) {
@@ -51,19 +51,9 @@ void readSensors() {
     sensorBuffer.lux = lux;
   }
 
-  // ---- Ready flag ----
+  
   sensorBuffer.ready = (bmeOK || lightOK);
 
-  // ---- Debug prints (Remove at the END) ----
-  /*
-  Serial.println("[Sensors] Reading:");
-  Serial.print("  Temp: ");     Serial.println(sensorBuffer.temperature);
-  Serial.print("  Humidity: "); Serial.println(sensorBuffer.humidity);
-  Serial.print("  Pressure: "); Serial.println(sensorBuffer.pressure);
-  Serial.print("  Lux: ");      Serial.println(sensorBuffer.lux);
-  Serial.print("  BME OK: ");   Serial.println(bmeOK ? "YES" : "NO");
-  Serial.print("  Light OK: "); Serial.println(lightOK ? "YES" : "NO");
-  */
 
 
 }
@@ -77,11 +67,11 @@ int getParameterCount() {
   int count = 0;
 
   if (bmeOK) {
-    count += 3; // temperature, humidity, pressure
+    count += 3; 
   }
 
   if (lightOK) {
-    count += 1; // lux
+    count += 1; 
   }
 
   return count;
