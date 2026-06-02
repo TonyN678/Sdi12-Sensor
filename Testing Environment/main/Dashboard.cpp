@@ -65,7 +65,7 @@ void dashboardUpdate() {
 
   unsigned long now = millis();
 
-  if (now - lastRefreshMs < kDashboardRefreshMs) {
+  if (now - lastRefreshMs < DashboardRefreshRate) {
     return;
   }
 

@@ -12,4 +12,3 @@ void rtcFormatTimestamp(char* out, size_t outLen);
 SdFs& sdCardFs();  
 
 #endif  
-//functions and variables related to SD card initialization, RTC timestamping, and providing access to the SdFs instance for file operations.
