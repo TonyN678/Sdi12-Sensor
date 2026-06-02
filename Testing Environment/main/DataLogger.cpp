@@ -6,7 +6,7 @@
 #include <Bounce2.h>
 #include <SdFat.h>
 
-
+// Private helpers for this file only
 namespace {
 
 const char* logFileName = "datalog.csv";
@@ -16,6 +16,7 @@ unsigned long lastLogTimeMs = 0;
 Bounce debouncerManual;
 Bounce debouncerClear;
 
+// Write header row once when file does not exist
 void appendCsvHeaderIfNew() {
   if (!sdCardIsReady()) {
     return;
@@ -34,6 +35,7 @@ void appendCsvHeaderIfNew() {
   Serial.println(F("[Log] datalog.csv header created."));
 }
 
+// Print the sensor data to the serial monitor
 void printLogToSerial(const char* source, const char* timestamp, const SensorData& d) {
   Serial.print(F("[Log] ("));
   Serial.print(source);
@@ -50,6 +52,7 @@ void printLogToSerial(const char* source, const char* timestamp, const SensorDat
   Serial.println(F(" lx"));
 }
 
+// Write the sensor data to the SD card
 void logDataInternal(const char* source) {
   char timestamp[24];
   rtcFormatTimestamp(timestamp, sizeof(timestamp));
@@ -100,6 +103,7 @@ void logDataInternal(const char* source) {
   printLogToSerial(source, timestamp, d);
 }
 
+// Clear the SD card log file
 void clearSdLogFile() {
   if (!sdCardIsReady()) {
     Serial.println(F("[Log] SD unavailable — cannot clear."));
@@ -119,6 +123,7 @@ void clearSdLogFile() {
 
 }  // namespace
 
+// Initialize the data logger
 void dataLoggerInit() {
   pinMode(ManualDataLogToSDcardButton, INPUT_PULLUP);
   pinMode(ClearSdButton, INPUT_PULLUP);
@@ -133,6 +138,7 @@ void dataLoggerInit() {
   Serial.println(F("[Log] Buttons active (manual log / clear datalog.csv)."));
 }
 
+// Update the data logger
 void dataLoggerUpdate() {
   unsigned long now = millis();
   if (now - lastLogTimeMs >= LogIntervalRate) {

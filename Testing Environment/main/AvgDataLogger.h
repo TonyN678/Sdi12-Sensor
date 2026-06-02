@@ -8,4 +8,3 @@ void avgDataLoggerInit();
 void avgDataLoggerUpdate();  
 
 #endif  
-// contains all functions and variables related to logging averaged sensor data to avgdatalogger.cpp

@@ -9,6 +9,7 @@ bool lightOK = false;
 
 static SensorData sensorBuffer;
 
+// Initialize the sensors
 void sensorsInit() {
   Wire.begin();
 
@@ -25,6 +26,7 @@ void sensorsInit() {
   sensorBuffer.ready = false;
 }
 
+// Read the sensors
 void readSensors() {
   // ---- BME280 ----
   float pres = bme.readPressure();
@@ -59,10 +61,12 @@ void readSensors() {
 }
 
 
+// Get the sensor data
 SensorData getSensorData() {
   return sensorBuffer;
 }
 
+// Get the number of parameters
 int getParameterCount() {
   int count = 0;
 
@@ -77,10 +81,12 @@ int getParameterCount() {
   return count;
 }
 
+// Check if the BME280 is OK
 bool isBme280Ok() {
   return bmeOK;
 }
 
+// Check if the BH1750 is OK
 bool isBh1750Ok() {
   return lightOK;
 }
